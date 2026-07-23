@@ -85,6 +85,15 @@ struct JSONCopyFormatOptions {
 	optional_ptr<const Expression> timestamptz_ns_format_expression;
 };
 
+static void NormalizeDecimalForJSON(string &decimal) {
+	// JSON numbers require an integer part before the decimal point.
+	if (!decimal.empty() && decimal[0] == '.') {
+		decimal.insert(0, "0");
+	} else if (decimal.size() > 1 && decimal[0] == '-' && decimal[1] == '.') {
+		decimal.insert(1, "0");
+	}
+}
+
 struct JSONCopyToJSONFunctionData : public FunctionData {
 public:
 	JSONCopyToJSONFunctionData(StructNames const_struct_names_p, bool has_date_format_p, string date_format_string_p,
@@ -533,6 +542,23 @@ static void CreateRawValues(yyjson_mut_doc *doc, yyjson_mut_val *vals[], const V
 	}
 }
 
+static void CreateRawDecimalValues(yyjson_mut_doc *doc, yyjson_mut_val *vals[], const Vector &value_v, idx_t count) {
+	UnifiedVectorFormat value_data;
+	value_v.ToUnifiedFormat(value_data);
+	auto values = UnifiedVectorFormat::GetData<string_t>(value_data);
+	for (idx_t i = 0; i < count; i++) {
+		idx_t val_idx = value_data.sel->get_index(i);
+		if (!value_data.validity.RowIsValid(val_idx)) {
+			vals[i] = yyjson_mut_null(doc);
+		} else {
+			auto decimal = values[val_idx].GetString();
+			NormalizeDecimalForJSON(decimal);
+			vals[i] = yyjson_mut_rawncpy(doc, decimal.c_str(), decimal.size());
+		}
+		D_ASSERT(vals[i] != nullptr);
+	}
+}
+
 static void CreateValuesStruct(const StructNames &names, yyjson_mut_doc *doc, yyjson_mut_val *vals[], Vector &value_v,
                                idx_t count, const JSONCopyFormatOptions &options) {
 	// Structs become values, therefore we initialize vals to JSON values
@@ -943,7 +969,7 @@ static void CreateValues(const StructNames &names, yyjson_mut_doc *doc, yyjson_m
 		if (DecimalType::GetWidth(type) > 15) {
 			Vector string_vector(LogicalTypeId::VARCHAR, count);
 			VectorOperations::DefaultCast(value_v, string_vector, count);
-			CreateRawValues(doc, vals, string_vector, count);
+			CreateRawDecimalValues(doc, vals, string_vector, count);
 		} else {
 			Vector double_vector(LogicalType::DOUBLE, count);
 			VectorOperations::DefaultCast(value_v, double_vector, count);

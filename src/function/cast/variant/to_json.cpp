@@ -23,6 +23,15 @@ namespace {
 struct JSONConverter {
 	using result_type = yyjson_mut_val *;
 
+	static void NormalizeDecimalForJSON(string &decimal) {
+		// JSON numbers require an integer part before the decimal point.
+		if (!decimal.empty() && decimal[0] == '.') {
+			decimal.insert(0, "0");
+		} else if (decimal.size() > 1 && decimal[0] == '-' && decimal[1] == '.') {
+			decimal.insert(1, "0");
+		}
+	}
+
 	static yyjson_mut_val *VisitNull(yyjson_mut_doc *doc) {
 		return yyjson_mut_null(doc);
 	}
@@ -142,6 +151,7 @@ struct JSONConverter {
 		} else {
 			throw InternalException("Unhandled decimal type");
 		}
+		NormalizeDecimalForJSON(val_str);
 		return yyjson_mut_rawncpy(doc, val_str.c_str(), val_str.size());
 	}
 

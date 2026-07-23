@@ -27,6 +27,22 @@ select to_json(42::VARIANT)
 ----
 42
 
+# issue #23996
+query T
+select 0.5::DECIMAL(1,1)::VARIANT::JSON
+----
+0.5
+
+query T
+select (-0.5)::DECIMAL(1,1)::VARIANT::JSON
+----
+-0.5
+
+query TT
+select 0.5::DECIMAL(38,38)::JSON, (-0.5)::DECIMAL(38,38)::JSON
+----
+0.50000000000000000000000000000000000000	-0.50000000000000000000000000000000000000
+
 query T
 select json_array(42::VARIANT)
 ----
